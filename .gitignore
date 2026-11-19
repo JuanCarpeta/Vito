@@ -1,7 +1,13 @@
-memoria.json
+# Ejecutables y binarios
 vito.exe
-archivos.db
-archivos.db-wal
-archivos.db-shm
-archivos.db-journal
-vito.log
+*.exe
+
+# Bases de datos SQLite y archivos temporales
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+
+# Logs y estado local
+*.log
+memoria.json

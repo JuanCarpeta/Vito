@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"golang.org/x/sys/windows/registry"
 )
 
 var directorioActual = directorioUsuario()
@@ -148,15 +150,104 @@ func navegar(ruta string) string {
 }
 
 func abrir(ruta string) string {
-	if _, err := os.Stat(ruta); err != nil {
-		return fmt.Sprintf("No existe: %s", ruta)
+	if _, err := os.Stat(ruta); err == nil {
+		return abrirReal(ruta)
 	}
+	// Si el destino no existe y parece un nombre de aplicacion, se resuelve.
+	if !strings.ContainsAny(ruta, `\/`) || filepath.Ext(ruta) == ".exe" {
+		if resuelta := resolverApp(filepath.Base(ruta)); resuelta != "" {
+			return abrirReal(resuelta)
+		}
+	}
+	return fmt.Sprintf("No existe: %s", ruta)
+}
+
+func abrirReal(ruta string) string {
 	cmd := exec.Command("cmd", "/c", "start", "", ruta)
 	cmd.SysProcAttr = sysProcOculto()
 	if err := cmd.Start(); err != nil {
 		return fmt.Sprintf("No pude abrir %s: %v", ruta, err)
 	}
 	return fmt.Sprintf("Abri %s", ruta)
+}
+
+// normalizarNombre quita espacios, guiones y acentos para comparar nombres.
+func normalizarNombre(s string) string {
+	s = strings.ToLower(s)
+	s = strings.NewReplacer(" ", "", "-", "", "_", "", "á", "a", "é", "e",
+		"í", "i", "ó", "o", "ú", "u").Replace(s)
+	return s
+}
+
+// resolverApp busca una aplicacion instalada por nombre y devuelve su ruta
+// o acceso directo. Orden: registro App Paths, Menu Inicio, indice de archivos.
+func resolverApp(nombre string) string {
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return ""
+	}
+	limpio := normalizarNombre(nombre)
+	limpio = strings.TrimSuffix(limpio, ".exe")
+
+	// 1) Claves App Paths del registro (el metodo canonico de Windows).
+	raices := []registry.Key{registry.LOCAL_MACHINE, registry.CURRENT_USER}
+	for _, raiz := range raices {
+		clave, err := registry.OpenKey(raiz,
+			fmt.Sprintf(`SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\%s.exe`, limpio),
+			registry.QUERY_VALUE)
+		if err != nil {
+			continue
+		}
+		ruta, _, err := clave.GetStringValue("")
+		clave.Close()
+		if err == nil && ruta != "" {
+			if _, err := os.Stat(ruta); err == nil {
+				return ruta
+			}
+		}
+	}
+
+	// 2) Accesos directos del Menu Inicio (programas y juegos instalan ahi).
+	candidatos := []string{}
+	carpetas := []string{
+		`C:\ProgramData\Microsoft\Windows\Start Menu\Programs`,
+		filepath.Join(os.Getenv("APPDATA"), "Microsoft", "Windows", "Start Menu", "Programs"),
+	}
+	for _, carpeta := range carpetas {
+		filepath.WalkDir(carpeta, func(ruta string, d os.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return nil
+			}
+			if !strings.EqualFold(filepath.Ext(d.Name()), ".lnk") {
+				return nil
+			}
+			if strings.Contains(normalizarNombre(d.Name()), limpio) {
+				candidatos = append(candidatos, ruta)
+			}
+			return nil
+		})
+	}
+	if len(candidatos) > 0 {
+		// El de nombre mas corto suele ser el lanzador principal.
+		menor := candidatos[0]
+		for _, c := range candidatos[1:] {
+			if len(c) < len(menor) {
+				menor = c
+			}
+		}
+		return menor
+	}
+
+	// 3) Ultimo recurso: ejecutables con ese nombre en el indice.
+	if db != nil {
+		for _, ruta := range BuscarIndice(limpio, 10) {
+			if strings.EqualFold(filepath.Ext(ruta), ".exe") &&
+				strings.Contains(normalizarNombre(filepath.Base(ruta)), limpio) {
+				return ruta
+			}
+		}
+	}
+	return ""
 }
 
 func leerArchivo(ruta string) string {
