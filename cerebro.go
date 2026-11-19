@@ -20,7 +20,7 @@ var historial []Mensaje
 
 func construirPrompt() string {
 	var b strings.Builder
-	b.WriteString("Eres Jarvis, un asistente de terminal. Hablas como una persona en una conversación natural: ")
+	b.WriteString("Eres Vito, un asistente de terminal. Hablas como una persona en una conversación natural: ")
 	b.WriteString("respuestas cortas de una a tres frases, tono cercano y amable, sin listas, sin asteriscos y sin emojis. Responde siempre en español.\n\n")
 	if resumen := ResumenMemoria(); resumen != "" {
 		b.WriteString(resumen)

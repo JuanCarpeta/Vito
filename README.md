@@ -1,4 +1,4 @@
-# Jarvis Go
+# Vito
 
 Asistente de terminal en Go: un solo ejecutable que conversa por texto y actúa
 sobre el computador usando Ollama (`llama3.1:8b`) con function calling.
@@ -14,16 +14,16 @@ sobre el computador usando Ollama (`llama3.1:8b`) con function calling.
 ## Compilar y ejecutar
 
 ```powershell
-cd C:\Proyectos\jarvis-go
-go build -o jarvis.exe .
-.\jarvis.exe
+cd C:\Proyectos\vito
+go build -o vito.exe .
+.\vito.exe
 ```
 
 Requisito: Ollama corriendo con `llama3.1:8b`. No necesita Python ni venv.
 
 ## Comandos de apagado
 
-`apagar`, `salir`, `apagar jarvis`, `cerrar jarvis` (exactos, en minúsculas).
+`apagar`, `salir`, `apagar vito`, `cerrar vito` (exactos, en minúsculas).
 
 ## Estado
 

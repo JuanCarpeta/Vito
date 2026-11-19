@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	fmt.Println("Jarvis (Go) listo. Escribe una orden o 'apagar' para salir.")
+	fmt.Println("Vito listo. Escribe una orden o 'apagar' para salir.")
 	lector := bufio.NewScanner(os.Stdin)
 	lector.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for {
@@ -23,7 +23,7 @@ func main() {
 			continue
 		}
 		frase := strings.ToLower(texto)
-		if frase == "apagar" || frase == "salir" || frase == "apagar jarvis" || frase == "cerrar jarvis" {
+		if frase == "apagar" || frase == "salir" || frase == "apagar vito" || frase == "cerrar vito" {
 			fmt.Println("Hasta luego.")
 			return
 		}
