@@ -28,6 +28,9 @@ func construirPrompt() string {
 		b.WriteString("\n\n")
 	}
 	b.WriteString("Estas ubicado en: " + directorioActual + ".\n")
+	if inventario := ResumenInventario(); inventario != "" {
+		b.WriteString("Conoces este equipo:\n" + inventario + "\n\n")
+	}
 	b.WriteString("Usa SIEMPRE las herramientas cuando el usuario pida algo del computador; nunca inventes rutas ni resultados. ")
 	b.WriteString("Para buscar archivos usa 'buscar_archivos' con palabras clave del nombre. Para ubicarte en una carpeta usa 'navegar_carpeta' (solo te mueves, no abres ventanas). ")
 	b.WriteString("Abre con 'abrir_archivo' solo cuando el usuario diga 'abre', 'ejecuta' o 'lanza'. Para leer usa 'leer_archivo'; para ver una carpeta 'listar_carpeta'; para tamano o fecha 'info_archivo'. ")

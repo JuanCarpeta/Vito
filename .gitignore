@@ -1,2 +1,7 @@
 memoria.json
-jarvis.exe
+vito.exe
+archivos.db
+archivos.db-wal
+archivos.db-shm
+archivos.db-journal
+vito.log

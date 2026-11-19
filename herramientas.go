@@ -27,48 +27,52 @@ func directorioUsuario() string {
 	return home
 }
 
-// buscarEnDisco recorre carpetas comunes buscando archivos cuyo nombre
+// discosDisponibles devuelve las unidades que existen (C:\, D:\, ...).
+func discosDisponibles() []string {
+	discos := []string{}
+	for c := 'A'; c <= 'Z'; c++ {
+		ruta := string(c) + `:\`
+		if _, err := os.Stat(ruta); err == nil {
+			discos = append(discos, ruta)
+		}
+	}
+	return discos
+}
+
+var carpetasRuido = map[string]bool{
+	"appdata": true, "node_modules": true, ".git": true, "__pycache__": true,
+	"venv": true, ".venv": true, "windows": true, "program files": true,
+	"program files (x86)": true, "programdata": true, "$recycle.bin": true,
+	"xboxgames": true, "windows.old": true,
+	"system volume information": true, "perflogs": true,
+	"onedrivetemp": true, "$sysreset": true,
+}
+
+// buscarEnDisco recorre TODAS las unidades buscando archivos cuyo nombre
 // contenga todas las palabras de la consulta (limite de resultados y tiempo).
 func buscarEnDisco(consulta string, maximo int) []string {
 	palabras := strings.Fields(strings.ToLower(consulta))
 	if len(palabras) == 0 {
 		return nil
 	}
-	raices := []string{
-		directorioUsuario(),
-		filepath.Join(directorioUsuario(), "Documents"),
-		filepath.Join(directorioUsuario(), "Desktop"),
-		filepath.Join(directorioUsuario(), "Downloads"),
-	}
-	vistas := map[string]bool{}
 	encontrados := []string{}
-	limite := time.Now().Add(10 * time.Second)
-	 saltar := map[string]bool{
-		"appdata": true, "node_modules": true, ".git": true, "__pycache__": true,
-		"venv": true, ".venv": true, "windows": true, "program files": true,
-		"program files (x86)": true, "programdata": true, "$recycle.bin": true,
-	}
-	for _, raiz := range raices {
-		if vistas[raiz] {
-			continue
-		}
+	vistas := map[string]bool{}
+	limite := time.Now().Add(20 * time.Second)
+	for _, raiz := range discosDisponibles() {
 		vistas[raiz] = true
 		filepath.WalkDir(raiz, func(ruta string, d os.DirEntry, err error) error {
 			if err != nil {
 				return filepath.SkipDir
 			}
-			if time.Now().After(limite) {
+			if time.Now().After(limite) || len(encontrados) >= maximo {
 				return filepath.SkipAll
 			}
 			nombre := strings.ToLower(d.Name())
 			if d.IsDir() {
-				if saltar[nombre] || strings.HasPrefix(nombre, "$") {
+				if carpetasRuido[nombre] || strings.HasPrefix(nombre, "$") || strings.HasPrefix(nombre, ".") {
 					return filepath.SkipDir
 				}
 				return nil
-			}
-			if len(encontrados) >= maximo {
-				return filepath.SkipAll
 			}
 			coincide := true
 			for _, p := range palabras {
@@ -215,6 +219,10 @@ func EjecutarHerramienta(nombre string, argsJSON json.RawMessage) string {
 	}
 	switch nombre {
 	case "buscar_archivos":
+		// Con indice SQLite es instantaneo; sin indice, recorre el disco.
+		if db != nil {
+			return formatearResultados(texto("consulta"))
+		}
 		return formatearBusqueda(texto("consulta"))
 	case "navegar_carpeta":
 		return navegar(texto("ruta"))
