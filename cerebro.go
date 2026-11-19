@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -101,10 +102,153 @@ func recortarHistorial(maximo, conservar int) {
 	historial = append([]Mensaje{historial[0]}, cola...)
 }
 
-// Preguntar procesa una orden del usuario y devuelve la respuesta en texto.
+// Intenciones directas: si la orden es clara, se ejecuta sin consultar al
+// modelo (llama3.1 a veces responde de memoria en vez de usar herramientas).
+
+var (
+	reNavegar = regexp.MustCompile(
+		`(?i)^\s*(?:ve|vete|vaya|navega|navegar|dirigete|dirígete|llevame|llévame|ponme|muevete|muévete|entra|cambia)\s+(?:a|al|hacia|en|para|me)?\s*(?:a|al|en|la|el)?\s*(.+?)\s*[.?!]?\s*$`)
+	reListar = regexp.MustCompile(
+		`(?i)\b(que hay|qué hay|lista|listame|listar|muestrame|muéstrame|contenido|que contiene|qué contiene)\b`)
+	reAqui = regexp.MustCompile(
+		`(?i)\b(aqui|aquí|actual|esta carpeta|este directorio|donde estoy|disco local|disco c)\b`)
+	reWeb = regexp.MustCompile(
+		`(?i)\b(internet|google|web|online|en linea|línea)\b`)
+)
+
+// destinosConocidos traduce apodos comunes a rutas reales.
+var destinosConocidos = map[string]string{
+	"disco local":    `C:\`,
+	"disco c":        `C:\`,
+	"raiz":           `C:\`,
+	"raíz":           `C:\`,
+	"documentos":     "",
+	"descargas":      "",
+	"escritorio":     "",
+	"imagenes":       "",
+	"imágenes":       "",
+	"musica":         "",
+	"música":         "",
+	"videos":         "",
+}
+
+func rutaConocida(nombre string) (string, bool) {
+	clave := strings.ToLower(strings.TrimSpace(nombre))
+	if ruta, ok := destinosConocidos[clave]; ok {
+		if ruta != "" {
+			return ruta, true
+		}
+		tipo, err := tipoEspecial(clave)
+		if err != nil {
+			return "", false
+		}
+		return tipo, true
+	}
+	return "", false
+}
+
+// tipoEspecial resuelve carpetas de usuario (Documentos, Descargas, etc.).
+func tipoEspecial(clave string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	nombres := map[string][]string{
+		"documentos": {"Documents", "Documentos", "Mis Documentos"},
+		"descargas":  {"Downloads", "Descargas"},
+		"escritorio": {"Desktop", "Escritorio"},
+		"imagenes":   {"Pictures", "Imágenes"},
+		"imágenes":   {"Pictures", "Imágenes"},
+		"musica":     {"Music", "Música"},
+		"música":     {"Music", "Música"},
+		"videos":     {"Videos", "Vídeos"},
+	}
+	subcarpetas := nombres[clave]
+	if len(subcarpetas) == 0 {
+		return "", fmt.Errorf("carpeta desconocida")
+	}
+	candidatas := []string{}
+	for _, sub := range subcarpetas {
+		candidatas = append(candidatas,
+			filepath.Join(home, sub),
+			filepath.Join(home, "OneDrive", sub))
+	}
+	for _, c := range candidatas {
+		if info, err := os.Stat(c); err == nil && info.IsDir() {
+			return c, nil
+		}
+	}
+	return "", fmt.Errorf("no encontre la carpeta %s", clave)
+}
+
+// resolverDestino convierte el texto de destino en una ruta existente.
+func resolverDestino(destino string) (string, bool) {
+	destino = strings.Trim(destino, `"' `)
+	if destino == "" {
+		return "", false
+	}
+	if ruta, ok := rutaConocida(destino); ok {
+		return ruta, true
+	}
+	if filepath.IsAbs(destino) {
+		if info, err := os.Stat(destino); err == nil && info.IsDir() {
+			return destino, true
+		}
+		return "", true // destino absoluto mencionado pero inexistente
+	}
+	candidata := filepath.Join(directorioActual, destino)
+	if info, err := os.Stat(candidata); err == nil && info.IsDir() {
+		return candidata, true
+	}
+	return "", false
+}
+
+// responderDirecto ejecuta navegar y listar sin modelo; "" = que decida el modelo.
+func responderDirecto(texto string) string {
+	if reWeb.MatchString(texto) {
+		return ""
+	}
+	if coincidencias := reNavegar.FindStringSubmatch(texto); coincidencias != nil {
+		ruta, mencionado := resolverDestino(coincidencias[1])
+		if ruta != "" {
+			return navegar(ruta)
+		}
+		if mencionado {
+			return fmt.Sprintf("No existe: %s", strings.TrimSpace(coincidencias[1]))
+		}
+		return ""
+	}
+	if reListar.MatchString(texto) {
+		// "que hay en X": destino despues de 'en/de'; sin destino = carpeta actual.
+		destino := ""
+		if m := regexp.MustCompile(`(?i)\b(?:en|de)\s+(.+?)\s*[.?!]?$`).FindStringSubmatch(texto); m != nil {
+			destino = m[1]
+		}
+		if destino != "" && !reAqui.MatchString(destino) {
+			if ruta, ok := resolverDestino(destino); ok {
+				if ruta != "" {
+					return listar(ruta)
+				}
+				// Destino mencionado pero no resuelto: que decida el modelo.
+				return ""
+			}
+		}
+		return listar(directorioActual)
+	}
+	return ""
+}
 func Preguntar(texto string) string {
 	recortarHistorial(25, 12)
 	refrescarHistorial()
+
+	// Orden clara: se responde sin modelo (mas confiable y rapido).
+	if respuesta := responderDirecto(texto); respuesta != "" {
+		historial = append(historial,
+			Mensaje{Role: "user", Content: texto},
+			Mensaje{Role: "assistant", Content: respuesta})
+		return respuesta
+	}
+
 	historial = append(historial, Mensaje{Role: "user", Content: texto})
 
 	for paso := 0; paso < maxPasos; paso++ {
