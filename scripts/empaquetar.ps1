@@ -15,6 +15,7 @@ Write-Host "Creando vito.zip..." -ForegroundColor Cyan
 $staging = Join-Path $env:TEMP ("vito-paquete-" + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $staging | Out-Null
 Copy-Item (Join-Path $raiz "vito.exe") $staging
+Copy-Item (Join-Path $raiz "scripts\instalar.bat") $staging
 Copy-Item (Join-Path $raiz "scripts\instalar.ps1") $staging
 Copy-Item (Join-Path $raiz "docs\COMO-INSTALAR.md") $staging
 

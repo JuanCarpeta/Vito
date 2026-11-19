@@ -30,7 +30,7 @@ Para instalar Ollama y el modelo automáticamente, usa el instalador incluido
 1. **Descarga el paquete** `vito.zip` desde la sección
    [Releases](https://github.com/JuanCarpeta/Vito/releases) del repositorio
    y descomprímelo donde quieras (por ejemplo `C:\Vito`).
-2. **Clic derecho** sobre `instalar.ps1` → **Ejecutar con PowerShell**.
+2. **Doble clic sobre `instalar.bat`** (no sobre el `.ps1`).
    El instalador deja todo listo: instala Ollama si falta, descarga el
    modelo (~4.9 GB, una sola vez) y lo deja corriendo en segundo plano.
 3. **Doble clic en `vito.exe`**. Listo.
