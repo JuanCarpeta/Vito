@@ -1,0 +1,244 @@
+package main
+
+// Herramientas de archivos: buscar, listar, navegar, abrir, leer, crear e info.
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+)
+
+var directorioActual = directorioUsuario()
+
+func directorioUsuario() string {
+	cwd, err := os.Getwd()
+	if err == nil {
+		return cwd
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "."
+	}
+	return home
+}
+
+// buscarEnDisco recorre carpetas comunes buscando archivos cuyo nombre
+// contenga todas las palabras de la consulta (limite de resultados y tiempo).
+func buscarEnDisco(consulta string, maximo int) []string {
+	palabras := strings.Fields(strings.ToLower(consulta))
+	if len(palabras) == 0 {
+		return nil
+	}
+	raices := []string{
+		directorioUsuario(),
+		filepath.Join(directorioUsuario(), "Documents"),
+		filepath.Join(directorioUsuario(), "Desktop"),
+		filepath.Join(directorioUsuario(), "Downloads"),
+	}
+	vistas := map[string]bool{}
+	encontrados := []string{}
+	limite := time.Now().Add(10 * time.Second)
+	 saltar := map[string]bool{
+		"appdata": true, "node_modules": true, ".git": true, "__pycache__": true,
+		"venv": true, ".venv": true, "windows": true, "program files": true,
+		"program files (x86)": true, "programdata": true, "$recycle.bin": true,
+	}
+	for _, raiz := range raices {
+		if vistas[raiz] {
+			continue
+		}
+		vistas[raiz] = true
+		filepath.WalkDir(raiz, func(ruta string, d os.DirEntry, err error) error {
+			if err != nil {
+				return filepath.SkipDir
+			}
+			if time.Now().After(limite) {
+				return filepath.SkipAll
+			}
+			nombre := strings.ToLower(d.Name())
+			if d.IsDir() {
+				if saltar[nombre] || strings.HasPrefix(nombre, "$") {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if len(encontrados) >= maximo {
+				return filepath.SkipAll
+			}
+			coincide := true
+			for _, p := range palabras {
+				if !strings.Contains(nombre, p) {
+					coincide = false
+					break
+				}
+			}
+			if coincide {
+				encontrados = append(encontrados, ruta)
+			}
+			return nil
+		})
+		if len(encontrados) >= maximo {
+			break
+		}
+	}
+	return encontrados
+}
+
+func formatearBusqueda(consulta string) string {
+	if strings.TrimSpace(consulta) == "" {
+		return "Falta la consulta de busqueda."
+	}
+	rutas := buscarEnDisco(consulta, 5)
+	if len(rutas) == 0 {
+		return "No encontre ningun archivo con ese nombre."
+	}
+	lineas := []string{fmt.Sprintf("Encontre %d archivo(s):", len(rutas))}
+	for i, r := range rutas {
+		lineas = append(lineas, fmt.Sprintf("%d. %s", i+1, r))
+	}
+	return strings.Join(lineas, "\n")
+}
+
+func listar(ruta string) string {
+	if ruta == "." || ruta == "" {
+		ruta = directorioActual
+	}
+	entradas, err := os.ReadDir(ruta)
+	if err != nil {
+		return fmt.Sprintf("No puedo leer %s: %v", ruta, err)
+	}
+	nombres := []string{}
+	for _, e := range entradas {
+		nombre := e.Name()
+		if e.IsDir() {
+			nombre += "/"
+		}
+		nombres = append(nombres, nombre)
+	}
+	sort.Strings(nombres)
+	if len(nombres) == 0 {
+		return fmt.Sprintf("%s esta vacia.", ruta)
+	}
+	return fmt.Sprintf("Contenido de %s:\n%s", ruta, strings.Join(nombres, "\n"))
+}
+
+func navegar(ruta string) string {
+	info, err := os.Stat(ruta)
+	if err != nil {
+		return fmt.Sprintf("No existe: %s", ruta)
+	}
+	if !info.IsDir() {
+		ruta = filepath.Dir(ruta)
+	}
+	abs, err := filepath.Abs(ruta)
+	if err != nil {
+		return fmt.Sprintf("Ruta invalida: %s", ruta)
+	}
+	directorioActual = abs
+	return "Ahora estoy en " + abs
+}
+
+func abrir(ruta string) string {
+	if _, err := os.Stat(ruta); err != nil {
+		return fmt.Sprintf("No existe: %s", ruta)
+	}
+	cmd := exec.Command("cmd", "/c", "start", "", ruta)
+	cmd.SysProcAttr = sysProcOculto()
+	if err := cmd.Start(); err != nil {
+		return fmt.Sprintf("No pude abrir %s: %v", ruta, err)
+	}
+	return fmt.Sprintf("Abri %s", ruta)
+}
+
+func leerArchivo(ruta string) string {
+	contenido, err := os.ReadFile(ruta)
+	if err != nil {
+		return fmt.Sprintf("No pude leer %s: %v", ruta, err)
+	}
+	texto := string(contenido)
+	if len(texto) > 3000 {
+		return fmt.Sprintf("Contenido de %s (truncado, usa offset para seguir): %s", ruta, texto[:3000])
+	}
+	return fmt.Sprintf("Contenido de %s: %s", ruta, texto)
+}
+
+func crearCarpeta(ruta string) string {
+	if err := os.MkdirAll(ruta, 0o755); err != nil {
+		return fmt.Sprintf("No pude crear la carpeta: %v", err)
+	}
+	return "Carpeta creada: " + ruta
+}
+
+func crearArchivo(ruta, contenido string) string {
+	if strings.TrimSpace(ruta) == "" {
+		return "Falta el nombre del archivo."
+	}
+	if !filepath.IsAbs(ruta) {
+		ruta = filepath.Join(directorioActual, ruta)
+	}
+	if contenido == "" {
+		contenido = ""
+	}
+	if err := os.WriteFile(ruta, []byte(contenido), 0o644); err != nil {
+		return fmt.Sprintf("No pude crear el archivo: %v", err)
+	}
+	return "Archivo creado: " + ruta
+}
+
+func infoArchivo(ruta string) string {
+	info, err := os.Stat(ruta)
+	if err != nil {
+		return fmt.Sprintf("No existe: %s", ruta)
+	}
+	tipo := "archivo"
+	if info.IsDir() {
+		tipo = "carpeta"
+	}
+	return fmt.Sprintf("%s es un %s de %.1f KB, modificado el %s.",
+		ruta, tipo, float64(info.Size())/1024, info.ModTime().Format("2006-01-02 15:04"))
+}
+
+// EjecutarHerramienta despacha una llamada del modelo y devuelve el resultado.
+func EjecutarHerramienta(nombre string, argsJSON json.RawMessage) string {
+	var args map[string]any
+	if len(argsJSON) > 0 {
+		json.Unmarshal(argsJSON, &args)
+	}
+	texto := func(clave string) string {
+		v, _ := args[clave].(string)
+		return strings.TrimSpace(v)
+	}
+	switch nombre {
+	case "buscar_archivos":
+		return formatearBusqueda(texto("consulta"))
+	case "navegar_carpeta":
+		return navegar(texto("ruta"))
+	case "abrir_archivo":
+		return abrir(texto("ruta"))
+	case "leer_archivo":
+		return leerArchivo(texto("ruta"))
+	case "crear_carpeta":
+		return crearCarpeta(texto("ruta"))
+	case "crear_archivo":
+		return crearArchivo(texto("ruta"), texto("contenido"))
+	case "listar_carpeta":
+		return listar(texto("ruta"))
+	case "info_archivo":
+		return infoArchivo(texto("ruta"))
+	case "buscar_web":
+		return BuscarWeb(texto("consulta"))
+	case "guardar_memoria":
+		return GuardarMemoria(texto("clave"), texto("valor"))
+	case "consultar_memoria":
+		return ConsultarMemoria(texto("clave"))
+	case "olvidar_memoria":
+		return OlvidarMemoria(texto("clave"))
+	default:
+		return fmt.Sprintf("Herramienta desconocida: %s", nombre)
+	}
+}
