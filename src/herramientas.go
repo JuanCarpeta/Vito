@@ -250,6 +250,99 @@ func resolverApp(nombre string) string {
 	return ""
 }
 
+// CerrarApp cierra una aplicacion por nombre: intento de cierre limpio y,
+// si no responde, forzado. Devuelve un mensaje para el usuario.
+func CerrarApp(nombre string) string {
+	nombre = strings.TrimSpace(nombre)
+	if nombre == "" {
+		return "Dime que aplicacion quieres que cierre."
+	}
+	proceso := resolverProceso(nombre)
+	if proceso == "" {
+		return fmt.Sprintf("No encontre una aplicacion llamada %s.", nombre)
+	}
+	if !procesoCorriendo(proceso) {
+		return fmt.Sprintf("%s no esta corriendo ahora mismo.", proceso)
+	}
+	// 1) Cierre elegante: el programa puede guardar su trabajo.
+	cmd := exec.Command("taskkill", "/IM", proceso)
+	cmd.SysProcAttr = sysProcOculto()
+	if err := cmd.Run(); err == nil {
+		return fmt.Sprintf("Cerre %s.", proceso)
+	}
+	// 2) No respondio: cierre forzado (como Ctrl+Alt+Supr > finalizar tarea).
+	cmd = exec.Command("taskkill", "/F", "/IM", proceso)
+	cmd.SysProcAttr = sysProcOculto()
+	if err := cmd.Run(); err == nil {
+		return fmt.Sprintf("%s no respondio al cierre normal, asi que lo cerre a la fuerza.", proceso)
+	}
+	return fmt.Sprintf("No pude cerrar %s; puede que necesite permisos de administrador.", proceso)
+}
+
+// resolverProceso convierte un nombre de aplicacion en el nombre de su proceso
+// (por ejemplo 'steam' -> 'steam.exe'), resolviendo accesos directos.
+func resolverProceso(nombre string) string {
+	nombre = strings.TrimSuffix(strings.TrimSpace(nombre), ".exe")
+	if nombre == "" {
+		return ""
+	}
+	// 1) App Paths del registro da el ejecutable directo.
+	limpio := normalizarNombre(nombre)
+	for _, raiz := range []registry.Key{registry.LOCAL_MACHINE, registry.CURRENT_USER} {
+		clave, err := registry.OpenKey(raiz,
+			fmt.Sprintf(`SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\%s.exe`, limpio),
+			registry.QUERY_VALUE)
+		if err != nil {
+			continue
+		}
+		ruta, _, err := clave.GetStringValue("")
+		clave.Close()
+		if err == nil && ruta != "" {
+			return strings.ToLower(filepath.Base(ruta))
+		}
+	}
+	// 2) Si viene de un acceso directo del Menu Inicio, resolver su destino.
+	atajo := resolverApp(nombre)
+	if strings.EqualFold(filepath.Ext(atajo), ".lnk") {
+		salida, err := exec.Command("powershell", "-NoProfile", "-Command",
+			fmt.Sprintf("(New-Object -ComObject WScript.Shell).CreateShortcut('%s').TargetPath",
+				strings.ReplaceAll(atajo, "'", "''"))).Output()
+		if err == nil {
+			destino := strings.TrimSpace(string(salida))
+			if destino != "" {
+				return strings.ToLower(filepath.Base(destino))
+			}
+		}
+	}
+	if atajo != "" && strings.EqualFold(filepath.Ext(atajo), ".exe") {
+		return strings.ToLower(filepath.Base(atajo))
+	}
+	// 3) Convencion comun: el nombre mismo es el proceso.
+	return limpio + ".exe"
+}
+
+// procesoCorriendo comprueba en tasklist si el proceso esta activo.
+func procesoCorriendo(proceso string) bool {
+	salida, err := exec.Command("tasklist", "/FO", "CSV", "/NH").Output()
+	if err != nil {
+		return true // si no podemos comprobarlo, intentamos cerrarlo igual
+	}
+	return strings.Contains(strings.ToLower(string(salida)), strings.ToLower(proceso))
+}
+
+// extraerRutaCreada saca la ruta del mensaje 'Archivo creado: <ruta>'.
+func extraerRutaCreada(respuesta string) string {
+	const prefijo = "Archivo creado: "
+	if indice := strings.Index(respuesta, prefijo); indice >= 0 {
+		ruta := strings.TrimSpace(respuesta[indice+len(prefijo):])
+		if fin := strings.Index(ruta, "\n"); fin >= 0 {
+			ruta = ruta[:fin]
+		}
+		return ruta
+	}
+	return respuesta
+}
+
 func leerArchivo(ruta string) string {
 	contenido, err := os.ReadFile(ruta)
 	if err != nil {
@@ -324,7 +417,29 @@ func EjecutarHerramienta(nombre string, argsJSON json.RawMessage) string {
 	case "crear_carpeta":
 		return crearCarpeta(texto("ruta"))
 	case "crear_archivo":
-		return crearArchivo(texto("ruta"), texto("contenido"))
+		respuesta := crearArchivo(texto("ruta"), texto("contenido"))
+		// Documentos con formato real segun la extension pedida.
+		ext := strings.ToLower(filepath.Ext(texto("ruta")))
+		rutaFinal := extraerRutaCreada(respuesta)
+		switch ext {
+		case ".docx", ".doc":
+			if err := CrearDOCX(rutaFinal, strings.TrimSpace(texto("titulo")), texto("contenido")); err == nil {
+				return "Documento Word creado: " + rutaFinal
+			}
+		case ".xlsx", ".xls":
+			if err := CrearXLSX(rutaFinal, texto("contenido")); err == nil {
+				return "Hoja de calculo creada: " + rutaFinal
+			}
+		case ".pdf":
+			if err := CrearPDF(rutaFinal, strings.TrimSpace(texto("titulo")), texto("contenido")); err == nil {
+				return "PDF creado: " + rutaFinal
+			}
+		}
+		return respuesta
+	case "cerrar_app":
+		return CerrarApp(texto("nombre"))
+	case "resumir_documento":
+		return ResumirDocumento(texto("ruta"))
 	case "listar_carpeta":
 		return listar(texto("ruta"))
 	case "info_archivo":

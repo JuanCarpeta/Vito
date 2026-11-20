@@ -35,6 +35,9 @@ func construirPrompt() string {
 	b.WriteString("Para buscar archivos usa 'buscar_archivos' con palabras clave del nombre. Para ubicarte en una carpeta usa 'navegar_carpeta' (solo te mueves, no abres ventanas). ")
 	b.WriteString("Abre con 'abrir_archivo' solo cuando el usuario diga 'abre', 'ejecuta' o 'lanza'. Para leer usa 'leer_archivo'; para ver una carpeta 'listar_carpeta'; para tamano o fecha 'info_archivo'. ")
 	b.WriteString("Para crear usa 'crear_archivo' y 'crear_carpeta'; si no te dan nombre o carpeta, pregunta antes de crear y sugiere Documentos. ")
+	b.WriteString("Para crear documentos con formato usa crear_archivo con la extension: word .docx, excel .xlsx, pdf .pdf; agrega un titulo breve si tiene sentido. ")
+	b.WriteString("Para cerrar aplicaciones usa 'cerrar_app' con solo el nombre (por ejemplo 'steam'); no lo uses si el usuario tiene trabajo sin guardar, avisale primero. ")
+	b.WriteString("Para resumir documentos usa 'resumir_documento' con la ruta (funciona con .txt y .docx). ")
 	b.WriteString("Para preguntas de internet, noticias o datos actuales usa 'buscar_web' y cuenta lo que encontraste sin inventar. ")
 	b.WriteString("Cuando el usuario pida que recuerdes algo usa 'guardar_memoria'; para saber que recuerdas 'consultar_memoria'; para borrar 'olvidar_memoria'. ")
 	b.WriteString("Nunca digas que hiciste algo si no llamaste a la herramienta correspondiente. Si una herramienta devuelve un error, dilo tal cual. ")
@@ -63,11 +66,16 @@ func definirHerramientas() []Herramienta {
 			map[string]EsquemaProp{"ruta": prop("string", "Ruta completa del archivo")}, []string{"ruta"}),
 		esquema("crear_carpeta", "Crea una carpeta en la ruta indicada, incluyendo carpetas padre.",
 			map[string]EsquemaProp{"ruta": prop("string", "Ruta completa de la carpeta")}, []string{"ruta"}),
-		esquema("crear_archivo", "Crea un archivo de texto con el contenido dado (puede ser vacio).",
+		esquema("crear_archivo", "Crea un archivo. Para documentos con formato usa la extension: .docx (Word), .xlsx (Excel) o .pdf. El campo titulo es opcional y va como encabezado. Para el resto crea texto plano.",
 			map[string]EsquemaProp{
-				"ruta":      prop("string", "Ruta completa del archivo nuevo"),
-				"contenido": prop("string", "Contenido inicial (opcional)"),
+				"ruta":      prop("string", "Ruta del archivo nuevo, con la extension deseada (por ejemplo informe.docx)"),
+				"contenido": prop("string", "Contenido del archivo (para Excel usa una linea por fila y punto y coma entre celdas)"),
+				"titulo":    prop("string", "Titulo opcional del documento (Word o PDF)"),
 			}, []string{"ruta"}),
+		esquema("cerrar_app", "Cierra una aplicacion abierta por su nombre ('cierra Steam', 'cierra el bloc de notas'). Primero intenta un cierre limpio para que el programa guarde; si no responde, lo fuerza.",
+			map[string]EsquemaProp{"nombre": prop("string", "Nombre de la aplicacion, por ejemplo 'steam'")}, []string{"nombre"}),
+		esquema("resumir_documento", "Lee un documento de texto (.txt) o Word (.docx) y devuelve un resumen breve hecho por el modelo. Usala cuando el usuario diga 'resume', 'de que trata' o 'hazme un resumen de'.",
+			map[string]EsquemaProp{"ruta": prop("string", "Ruta del documento a resumir")}, []string{"ruta"}),
 		esquema("listar_carpeta", "Lista el contenido real de una carpeta. Usa '.' para la carpeta actual.",
 			map[string]EsquemaProp{"ruta": prop("string", "Ruta de la carpeta")}, []string{"ruta"}),
 		esquema("info_archivo", "Devuelve tamano, fecha de modificacion y tipo de un archivo o carpeta.",
@@ -115,6 +123,8 @@ var (
 		`(?i)\b(que hay|qué hay|lista|listame|listar|muestrame|muéstrame|contenido|que contiene|qué contiene)\b`)
 	reAqui = regexp.MustCompile(
 		`(?i)\b(aqui|aquí|actual|esta carpeta|este directorio|donde estoy|disco local|disco c)\b`)
+	reCerrar = regexp.MustCompile(
+		`(?i)^\s*(?:cierra|cerrar|cierrame|ciérrame|mata)\s+(?:el|la|los|las)?\s*(.+?)\s*[.?!]?\s*$`)
 	reWeb = regexp.MustCompile(
 		`(?i)\b(internet|google|web|online|en linea|línea)\b`)
 )
@@ -211,6 +221,9 @@ func responderDirecto(texto string) string {
 	if reWeb.MatchString(texto) {
 		return ""
 	}
+	if coincidencias := reCerrar.FindStringSubmatch(texto); coincidencias != nil {
+		return CerrarApp(coincidencias[1])
+	}
 	if coincidencias := reNavegar.FindStringSubmatch(texto); coincidencias != nil {
 		ruta, mencionado := resolverDestino(coincidencias[1])
 		if ruta != "" {
@@ -240,6 +253,45 @@ func responderDirecto(texto string) string {
 	}
 	return ""
 }
+
+// reBarraInvalida halla una barra invertida seguida de algo que no es un
+// escape JSON valido (" \ / b f n r t u).
+var reBarraInvalida = regexp.MustCompile(`\\([^"\\/bfnrtu])`)
+
+// llamadaEnTexto detecta una llamada a herramienta escrita como JSON en el
+// contenido del mensaje (manias de llama3.1) y la convierte en llamada real.
+func llamadaEnTexto(contenido string) (LlamadaHerr, bool) {
+	limpio := strings.TrimSpace(contenido)
+	limpio = strings.TrimPrefix(limpio, "```json")
+	limpio = strings.TrimPrefix(limpio, "```")
+	limpio = strings.TrimSuffix(limpio, "```")
+	limpio = strings.TrimSpace(limpio)
+	if !strings.HasPrefix(limpio, "{") || !strings.Contains(limpio, "\"name\"") {
+		return LlamadaHerr{}, false
+	}
+	// El modelo escribe rutas de Windows con una sola barra (C:\Users), que
+	// es JSON invalido. Se duplican las barras huerfanas antes de interpretar.
+	marcador := "\x00DobleBarra\x00"
+	limpio = strings.ReplaceAll(limpio, "\\\\", marcador)
+	limpio = reBarraInvalida.ReplaceAllString(limpio, "\\\\$1")
+	limpio = strings.ReplaceAll(limpio, marcador, "\\\\")
+	var intento struct {
+		Name       string          `json:"name"`
+		Parameters json.RawMessage `json:"parameters"`
+		Arguments  json.RawMessage `json:"arguments"`
+	}
+	if err := json.Unmarshal([]byte(limpio), &intento); err != nil || intento.Name == "" {
+		return LlamadaHerr{}, false
+	}
+	args := intento.Parameters
+	if len(args) == 0 {
+		args = intento.Arguments
+	}
+	return LlamadaHerr{Function: FuncionLlamada{
+		Nombre: intento.Name, Argumentos: args,
+	}}, true
+}
+
 func Preguntar(texto string) string {
 	recortarHistorial(25, 12)
 	refrescarHistorial()
@@ -263,7 +315,16 @@ func Preguntar(texto string) string {
 		}
 		historial = append(historial, mensaje)
 
-		if len(mensaje.ToolCalls) == 0 {
+		llamadas := mensaje.ToolCalls
+		if len(llamadas) == 0 {
+			// llama3.1 a veces escribe la llamada como JSON en el texto:
+			// {"name": "...", "parameters": {...}}. Se rescata igual.
+			if llamada, ok := llamadaEnTexto(mensaje.Content); ok {
+				llamadas = []LlamadaHerr{llamada}
+			}
+		}
+
+		if len(llamadas) == 0 {
 			contenido := strings.TrimSpace(mensaje.Content)
 			if contenido == "" {
 				contenido = "No te entendi, ¿me lo repites?"
@@ -273,7 +334,7 @@ func Preguntar(texto string) string {
 		}
 
 		accion := ""
-		for _, llamada := range mensaje.ToolCalls {
+		for _, llamada := range llamadas {
 			args := llamada.Function.Argumentos
 			if len(args) == 0 {
 				args = json.RawMessage("{}")
@@ -283,7 +344,8 @@ func Preguntar(texto string) string {
 				Role: "tool", Content: resultado, ToolName: llamada.Function.Nombre,
 			})
 			switch llamada.Function.Nombre {
-			case "crear_archivo", "crear_carpeta", "abrir_archivo", "navegar_carpeta":
+			case "crear_archivo", "crear_carpeta", "abrir_archivo", "navegar_carpeta",
+				"resumir_documento", "consultar_memoria", "buscar_web":
 				accion = resultado
 			}
 		}

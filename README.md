@@ -73,8 +73,11 @@ Escribe tus órdenes y presiona Enter. Ejemplos:
 | `busca el archivo de calculo` | Busca archivos por nombre en todo el disco |
 | `ve a C:\Users\PC\Documents` | Se ubica en una carpeta (sin abrir ventanas) |
 | `abre steam` | Abre un archivo, carpeta o aplicación instalada |
+| `cierra steam` | Cierra una aplicación (cierre limpio, luego forzado) |
 | `lee notas.txt` | Muestra el contenido de un archivo |
-| `crea un archivo llamado notas.txt con el texto hola` | Crea archivos de verdad |
+| `hazme un resumen de informe.docx` | Resume un .txt o .docx con el modelo |
+| `crea un word llamado informe.docx con el texto...` | Crea Word, Excel o PDF reales |
+| `crea un archivo llamado notas.txt con el texto hola` | Crea archivos de texto |
 | `recuerda que estudio a las 7` | Guarda el dato para siempre |
 | `que recuerdas de mi` | Consulta la memoria persistente |
 | `busca en internet el clima de hoy` | Búsqueda web en DuckDuckGo |
