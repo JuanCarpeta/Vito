@@ -140,7 +140,7 @@ func (v *Vigilante) procesarNotificacion(accion int, ruta string) {
 			v.cola.Encolar(Evento{"movido", ruta, "", esCarpeta})
 		}
 	}
-	}
+}
 
 // osStat es un punto unico para comprobar el disco antes de tocar el indice.
 func osStat(ruta string) (os.FileInfo, error) {

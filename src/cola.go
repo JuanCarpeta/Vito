@@ -54,16 +54,16 @@ func combinar(previo, nuevo Evento) Evento {
 
 // ColaEventos agrupa eventos en lotes y los entrega al procesador.
 type ColaEventos struct {
-	procesar     func([]Evento)
-	reconciliar  func()
-	pendientes   map[string]Evento
-	orden        []string
-	ultimo       time.Time
-	primero      time.Time
+	procesar      func([]Evento)
+	reconciliar   func()
+	pendientes    map[string]Evento
+	orden         []string
+	ultimo        time.Time
+	primero       time.Time
 	reconciliarYa bool
-	mu           sync.Mutex
-	aviso        *sync.Cond
-	parar        chan struct{}
+	mu            sync.Mutex
+	aviso         *sync.Cond
+	parar         chan struct{}
 }
 
 func NuevaColaEventos(procesar func([]Evento), reconciliar func()) *ColaEventos {

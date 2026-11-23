@@ -10,16 +10,10 @@ import (
 )
 
 func main() {
-	fmt.Println("Vito listo. Escribe una orden o 'apagar' para salir.")
-
 	// Indice de archivos: arranque rapido, el escaneo completo va en segundo plano.
-	if err := InicializarDB(); err != nil {
-		fmt.Printf("Aviso: no pude abrir el indice de archivos (%v); la busqueda sera lenta.\n", err)
-	} else {
-		go func() {
-			IndexarUnidades(false)
-			escribirLog("escaneo inicial listo: %d filas en el indice", ConteoFilas())
-		}()
+	indiceOK := InicializarDB() == nil
+	if !indiceOK {
+		fmt.Println("Aviso: no pude abrir el indice de archivos; la busqueda sera lenta.")
 	}
 
 	// Vigilancia en tiempo real con cola de eventos y reconciliacion periodica.
@@ -32,8 +26,25 @@ func main() {
 		defer cola.Detener()
 	}
 
+	if indiceOK {
+		AnimarArranque(func() {
+			IndexarUnidades(false)
+			escribirLog("escaneo inicial listo: %d filas en el indice", ConteoFilas())
+		})
+	} else {
+		AnimarArranque(nil)
+	}
+
 	lector := bufio.NewScanner(os.Stdin)
 	lector.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	confirmarAccion := func(pregunta string) bool {
+		fmt.Print(pregunta)
+		if !lector.Scan() {
+			return false
+		}
+		respuesta := strings.ToLower(strings.TrimSpace(lector.Text()))
+		return respuesta == "s" || respuesta == "si" || respuesta == "sí"
+	}
 	for {
 		fmt.Print("> ")
 		if !lector.Scan() {
@@ -48,6 +59,6 @@ func main() {
 			fmt.Println("Hasta luego.")
 			return
 		}
-		fmt.Println(Preguntar(texto))
+		fmt.Println(Preguntar(texto, confirmarAccion))
 	}
 }

@@ -17,6 +17,8 @@ import (
 
 var directorioActual = directorioUsuario()
 
+var ultimoArchivo string
+
 func directorioUsuario() string {
 	cwd, err := os.Getwd()
 	if err == nil {
@@ -389,6 +391,276 @@ func infoArchivo(ruta string) string {
 	}
 	return fmt.Sprintf("%s es un %s de %.1f KB, modificado el %s.",
 		ruta, tipo, float64(info.Size())/1024, info.ModTime().Format("2006-01-02 15:04"))
+}
+
+func resolverArchivo(consulta string) (string, string) {
+	consulta = strings.Trim(strings.TrimSpace(consulta), `"'`)
+	if consulta == "" {
+		return "", "Falta el nombre del archivo."
+	}
+	if esPronombreArchivo(consulta) {
+		if ultimoArchivo == "" {
+			return "", "No se a que archivo te refieres."
+		}
+		if _, err := os.Stat(ultimoArchivo); err != nil {
+			return "", "No se a que archivo te refieres."
+		}
+		return ultimoArchivo, ""
+	}
+
+	ruta := ""
+	if filepath.IsAbs(consulta) {
+		ruta = filepath.Clean(consulta)
+	} else {
+		candidata := filepath.Join(directorioActual, consulta)
+		if _, err := os.Stat(candidata); err == nil {
+			ruta = candidata
+		}
+	}
+
+	if ruta == "" {
+		nombre, pistas := nombreYPistas(consulta)
+		encontradas := []string{}
+		if db != nil {
+			for _, candidata := range BuscarIndice(nombre, 20) {
+				if _, err := os.Stat(candidata); err != nil {
+					continue
+				}
+				coincide := true
+				for _, pista := range pistas {
+					if !strings.Contains(normalizarNombre(filepath.Dir(candidata)), normalizarNombre(pista)) {
+						coincide = false
+						break
+					}
+				}
+				if coincide {
+					encontradas = append(encontradas, candidata)
+				}
+			}
+		}
+		if len(encontradas) == 0 {
+			return "", "No encontre ningun archivo con ese nombre."
+		}
+		if len(encontradas) > 1 {
+			lineas := []string{"Encontre varios archivos; dime cual (nombre completo o ruta):"}
+			for i, r := range encontradas {
+				lineas = append(lineas, fmt.Sprintf("%d. %s", i+1, r))
+			}
+			return "", strings.Join(lineas, "\n")
+		}
+		ruta = encontradas[0]
+	}
+
+	ultimoArchivo = ruta
+	return ruta, ""
+}
+
+func esPronombreArchivo(texto string) bool {
+	switch strings.ToLower(strings.TrimSpace(texto)) {
+	case "esto", "este", "esta", "eso", "esa", "ese", "ello":
+		return true
+	}
+	return false
+}
+
+func borrarArchivo(consulta string, confirmar func(string) bool) string {
+	ruta, mensaje := resolverArchivo(consulta)
+	if mensaje != "" {
+		return mensaje
+	}
+	info, err := os.Stat(ruta)
+	if err != nil {
+		return fmt.Sprintf("No existe: %s", ruta)
+	}
+	if info.IsDir() {
+		return "No borro carpetas, solo archivos."
+	}
+	if rutaProtegida(ruta) {
+		return "No puedo borrar ese archivo: es parte de Vito o del sistema."
+	}
+	if confirmar == nil || !confirmar(fmt.Sprintf("¿Borrar %s? (s/N): ", ruta)) {
+		return "No borre nada."
+	}
+	if err := os.Remove(ruta); err != nil {
+		return fmt.Sprintf("No pude borrar %s: %v", ruta, err)
+	}
+	if db != nil {
+		BorrarArchivo(ruta)
+	}
+	escribirLog("borrado: %s", ruta)
+	ultimoArchivo = ""
+	return fmt.Sprintf("Borre %s.", ruta)
+}
+
+func moverOCopiar(consulta, destino string, mover bool, confirmar func(string) bool) string {
+	origen, mensaje := resolverArchivo(consulta)
+	if mensaje != "" {
+		return mensaje
+	}
+	info, err := os.Stat(origen)
+	if err != nil {
+		return fmt.Sprintf("No existe: %s", origen)
+	}
+	if rutaProtegida(origen) {
+		return "No puedo usar ese archivo: es parte de Vito o del sistema."
+	}
+
+	carpeta, mensaje := resolverCarpetaDestino(destino)
+	if mensaje != "" {
+		return mensaje
+	}
+	final := filepath.Join(carpeta, filepath.Base(origen))
+	if strings.EqualFold(origen, final) {
+		return "El archivo ya esta en esa carpeta."
+	}
+	if info.IsDir() && strings.HasPrefix(strings.ToLower(final), strings.ToLower(origen)+string(os.PathSeparator)) {
+		return "No puedo mover una carpeta dentro de si misma."
+	}
+	if _, err := os.Stat(final); err == nil {
+		if rutaProtegida(final) {
+			return "No puedo sobrescribir ese destino: es parte de Vito o del sistema."
+		}
+		if confirmar == nil || !confirmar(fmt.Sprintf("Ya existe %s. ¿Sobrescribir? (s/N): ", final)) {
+			return "No hice nada."
+		}
+		if err := os.RemoveAll(final); err != nil {
+			return fmt.Sprintf("No pude sobrescribir %s: %v", final, err)
+		}
+	}
+
+	accion := "Copie"
+	if mover {
+		accion = "Move"
+		if err := os.Rename(origen, final); err != nil {
+			if err := copiarRuta(origen, final, info.IsDir()); err != nil {
+				return fmt.Sprintf("No pude mover %s: %v", origen, err)
+			}
+			if err := os.RemoveAll(origen); err != nil {
+				return fmt.Sprintf("Copie %s pero no pude borrar el original: %v", origen, err)
+			}
+		}
+		if db != nil {
+			BorrarArchivo(origen)
+		}
+	} else {
+		if err := copiarRuta(origen, final, info.IsDir()); err != nil {
+			return fmt.Sprintf("No pude copiar %s: %v", origen, err)
+		}
+	}
+
+	if db != nil {
+		if info.IsDir() {
+			escanearSubarbol(final, time.Now().Add(2*time.Minute))
+		} else {
+			indexarArchivoSuelto(final)
+		}
+	}
+	escribirLog("%s %s a %s", strings.ToLower(accion), origen, final)
+	ultimoArchivo = final
+	return fmt.Sprintf("%s %s a %s.", accion, origen, final)
+}
+
+func resolverCarpetaDestino(destino string) (string, string) {
+	destino = strings.Trim(strings.TrimSpace(destino), `"'`)
+	if destino == "" {
+		return "", "Falta la carpeta de destino."
+	}
+	if ruta, ok := rutaConocida(destino); ok {
+		if ruta == "" {
+			return "", "No encontre la carpeta " + destino
+		}
+		return ruta, ""
+	}
+	if ruta, _ := resolverDestino(destino); ruta != "" {
+		return ruta, ""
+	}
+	nueva := destino
+	if !filepath.IsAbs(nueva) {
+		nueva = filepath.Join(directorioActual, nueva)
+	}
+	if err := os.MkdirAll(nueva, 0o755); err != nil {
+		return "", fmt.Sprintf("No pude crear la carpeta %s: %v", nueva, err)
+	}
+	return nueva, ""
+}
+
+func copiarRuta(origen, destino string, esCarpeta bool) error {
+	if !esCarpeta {
+		info, err := os.Stat(origen)
+		if err != nil {
+			return err
+		}
+		datos, err := os.ReadFile(origen)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(destino, datos, info.Mode().Perm())
+	}
+	return filepath.WalkDir(origen, func(ruta string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		relativa, err := filepath.Rel(origen, ruta)
+		if err != nil {
+			return err
+		}
+		nueva := filepath.Join(destino, relativa)
+		if d.IsDir() {
+			return os.MkdirAll(nueva, 0o755)
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		datos, err := os.ReadFile(ruta)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(nueva, datos, info.Mode().Perm())
+	})
+}
+
+func nombreYPistas(consulta string) (string, []string) {
+	palabrasParar := map[string]bool{
+		"el": true, "la": true, "los": true, "las": true, "un": true, "una": true,
+		"de": true, "del": true, "en": true, "para": true, "archivo": true,
+		"documento": true, "carpeta": true,
+	}
+	nombre := ""
+	pistas := []string{}
+	for _, palabra := range strings.Fields(strings.ToLower(consulta)) {
+		if palabrasParar[palabra] {
+			continue
+		}
+		if nombre == "" && strings.Contains(palabra, ".") {
+			nombre = palabra
+			continue
+		}
+		pistas = append(pistas, palabra)
+	}
+	if nombre == "" {
+		nombre = strings.Join(pistas, "")
+		pistas = nil
+	}
+	return nombre, pistas
+}
+
+func rutaProtegida(ruta string) bool {
+	abs, err := filepath.Abs(ruta)
+	if err != nil {
+		return true
+	}
+	if filepath.Dir(abs) == abs {
+		return true
+	}
+	if home, err := os.UserHomeDir(); err == nil && strings.EqualFold(abs, home) {
+		return true
+	}
+	if strings.EqualFold(abs, dirDatos()) {
+		return true
+	}
+	base := strings.ToLower(filepath.Base(abs))
+	return ArchivosPropios[base] || Ignoradas[base]
 }
 
 // EjecutarHerramienta despacha una llamada del modelo y devuelve el resultado.

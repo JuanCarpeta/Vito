@@ -36,6 +36,8 @@ func construirPrompt() string {
 	b.WriteString("Abre con 'abrir_archivo' solo cuando el usuario diga 'abre', 'ejecuta' o 'lanza'. Para leer usa 'leer_archivo'; para ver una carpeta 'listar_carpeta'; para tamano o fecha 'info_archivo'. ")
 	b.WriteString("Para crear usa 'crear_archivo' y 'crear_carpeta'; si no te dan nombre o carpeta, pregunta antes de crear y sugiere Documentos. ")
 	b.WriteString("Para crear documentos con formato usa crear_archivo con la extension: word .docx, excel .xlsx, pdf .pdf; agrega un titulo breve si tiene sentido. ")
+	b.WriteString("Para borrar archivos usa la orden directa 'borra <nombre>': siempre pides confirmación antes y no borras carpetas. ")
+	b.WriteString("Para mover usa 'mueve <nombre> a <carpeta>' y para copiar 'copia <nombre> a <carpeta>'; acepta alias como descargas, documentos o escritorio, 'esto' se refiere al ultimo archivo mencionado y pide confirmación antes de sobrescribir. ")
 	b.WriteString("Para cerrar aplicaciones usa 'cerrar_app' con solo el nombre (por ejemplo 'steam'); no lo uses si el usuario tiene trabajo sin guardar, avisale primero. ")
 	b.WriteString("Para resumir documentos usa 'resumir_documento' con la ruta (funciona con .txt y .docx). ")
 	b.WriteString("Para preguntas de internet, noticias o datos actuales usa 'buscar_web' y cuenta lo que encontraste sin inventar. ")
@@ -125,24 +127,28 @@ var (
 		`(?i)\b(aqui|aquí|actual|esta carpeta|este directorio|donde estoy|disco local|disco c)\b`)
 	reCerrar = regexp.MustCompile(
 		`(?i)^\s*(?:cierra|cerrar|cierrame|ciérrame|mata)\s+(?:el|la|los|las)?\s*(.+?)\s*[.?!]?\s*$`)
+	reBorrar = regexp.MustCompile(
+		`(?i)^\s*(?:borra|borrar|elimina|eliminar|suprime|suprimir)\s+(.+?)\s*[.?!]?\s*$`)
+	reMoverCopiar = regexp.MustCompile(
+		`(?i)^\s*(mueve|mover|moveme|muéveme|traslada|trasladar|copia|copiar|copiame|cópia)\s+(.+?)\s+(?:a|al|hacia|para|en)\s+(.+?)\s*[.?!]?\s*$`)
 	reWeb = regexp.MustCompile(
 		`(?i)\b(internet|google|web|online|en linea|línea)\b`)
 )
 
 // destinosConocidos traduce apodos comunes a rutas reales.
 var destinosConocidos = map[string]string{
-	"disco local":    `C:\`,
-	"disco c":        `C:\`,
-	"raiz":           `C:\`,
-	"raíz":           `C:\`,
-	"documentos":     "",
-	"descargas":      "",
-	"escritorio":     "",
-	"imagenes":       "",
-	"imágenes":       "",
-	"musica":         "",
-	"música":         "",
-	"videos":         "",
+	"disco local": `C:\`,
+	"disco c":     `C:\`,
+	"raiz":        `C:\`,
+	"raíz":        `C:\`,
+	"documentos":  "",
+	"descargas":   "",
+	"escritorio":  "",
+	"imagenes":    "",
+	"imágenes":    "",
+	"musica":      "",
+	"música":      "",
+	"videos":      "",
 }
 
 func rutaConocida(nombre string) (string, bool) {
@@ -217,9 +223,16 @@ func resolverDestino(destino string) (string, bool) {
 }
 
 // responderDirecto ejecuta navegar y listar sin modelo; "" = que decida el modelo.
-func responderDirecto(texto string) string {
+func responderDirecto(texto string, confirmar func(string) bool) string {
 	if reWeb.MatchString(texto) {
 		return ""
+	}
+	if coincidencias := reBorrar.FindStringSubmatch(texto); coincidencias != nil {
+		return borrarArchivo(coincidencias[1], confirmar)
+	}
+	if coincidencias := reMoverCopiar.FindStringSubmatch(texto); coincidencias != nil {
+		mover := !strings.HasPrefix(strings.ToLower(coincidencias[1]), "copi")
+		return moverOCopiar(coincidencias[2], coincidencias[3], mover, confirmar)
 	}
 	if coincidencias := reCerrar.FindStringSubmatch(texto); coincidencias != nil {
 		return CerrarApp(coincidencias[1])
@@ -292,12 +305,12 @@ func llamadaEnTexto(contenido string) (LlamadaHerr, bool) {
 	}}, true
 }
 
-func Preguntar(texto string) string {
+func Preguntar(texto string, confirmar func(string) bool) string {
 	recortarHistorial(25, 12)
 	refrescarHistorial()
 
 	// Orden clara: se responde sin modelo (mas confiable y rapido).
-	if respuesta := responderDirecto(texto); respuesta != "" {
+	if respuesta := responderDirecto(texto, confirmar); respuesta != "" {
 		historial = append(historial,
 			Mensaje{Role: "user", Content: texto},
 			Mensaje{Role: "assistant", Content: respuesta})

@@ -1,9 +1,33 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestIntencionMoverCopiar(t *testing.T) {
+	anterior := directorioActual
+	directorioActual = t.TempDir()
+	defer func() { directorioActual = anterior }()
+
+	if err := os.WriteFile(filepath.Join(directorioActual, "notas.txt"), []byte("hola"), 0o644); err != nil {
+		t.Fatalf("no pude crear el archivo: %v", err)
+	}
+	destino := filepath.Join(directorioActual, "destino")
+	if err := os.MkdirAll(destino, 0o755); err != nil {
+		t.Fatalf("no pude crear el destino: %v", err)
+	}
+
+	respuesta := responderDirecto("mueve notas.txt a destino", nil)
+	if !strings.Contains(respuesta, "Move") {
+		t.Errorf("respuesta inesperada: %s", respuesta)
+	}
+	if _, err := os.Stat(filepath.Join(destino, "notas.txt")); err != nil {
+		t.Fatalf("no move el archivo: %v", err)
+	}
+}
 
 func TestLlamadaEnTexto(t *testing.T) {
 	casos := []string{

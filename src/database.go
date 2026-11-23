@@ -199,6 +199,13 @@ func ConteoFilas() int {
 	return n
 }
 
+// ConteoFirmas devuelve cuantas carpetas tiene registradas el indice.
+func ConteoFirmas() int {
+	var n int
+	db.QueryRow(`SELECT COUNT(*) FROM firmas`).Scan(&n)
+	return n
+}
+
 // BorrarTodoLimpia el indice (para reconstrucciones).
 func BorrarTodo() error {
 	_, err := db.Exec(`DELETE FROM archivos`)

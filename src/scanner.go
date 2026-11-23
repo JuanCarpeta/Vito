@@ -10,17 +10,20 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
+var carpetasEscaneadas atomic.Int64
+
 // Entrada es un archivo o carpeta listo para el indice.
 type Entrada struct {
-	Ruta     string
-	Nombre   string
-	Tamano   int64
-	Mtime    time.Time
+	Ruta      string
+	Nombre    string
+	Tamano    int64
+	Mtime     time.Time
 	EsCarpeta bool
-	Padre    string
+	Padre     string
 }
 
 // Ignoradas son las carpetas que no se indexan (misma lista que usa el vigilante).
@@ -79,6 +82,7 @@ func escanearCarpeta(ruta string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	carpetasEscaneadas.Add(1)
 	firma := firmaCarpeta(ruta, entradas)
 	// Si nada cambio, no reescribimos las filas.
 	if previa := LeerFirma(ruta); previa == firma {
@@ -125,6 +129,7 @@ func escanearSubarbol(raiz string, limite time.Time) {
 // IndexarUnidades escanea las unidades con indexacion incremental: si la firma
 // de una carpeta no cambio, no entra. forzar=true re-escanea todo.
 func IndexarUnidades(forzar bool) int {
+	carpetasEscaneadas.Store(0)
 	inicio := time.Now()
 	total := ConteoFilas()
 	for _, unidad := range discosDisponibles() {
@@ -159,6 +164,7 @@ func recorrerUnidad(raiz string, forzar bool, limite time.Time) {
 			}
 			firma := firmaCarpeta(completa, entradasInternas)
 			if previa := LeerFirma(completa); previa == firma {
+				carpetasEscaneadas.Add(1)
 				GuardarFirma(completa, firma, time.Now())
 				continue
 			}
