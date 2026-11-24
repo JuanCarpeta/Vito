@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 func main() {
@@ -15,6 +16,7 @@ func main() {
 	if !indiceOK {
 		fmt.Println("Aviso: no pude abrir el indice de archivos; la busqueda sera lenta.")
 	}
+	podarHistorial()
 
 	// Vigilancia en tiempo real con cola de eventos y reconciliacion periodica.
 	if VigilarTiempoReal {
@@ -56,9 +58,21 @@ func main() {
 		}
 		frase := strings.ToLower(texto)
 		if frase == "apagar" || frase == "salir" || frase == "apagar vito" || frase == "cerrar vito" {
+			// El resumen va en segundo plano con espera corta: no congelar la salida.
+			listo := make(chan struct{})
+			go func() {
+				actualizarResumen()
+				close(listo)
+			}()
+			select {
+			case <-listo:
+			case <-time.After(4 * time.Second):
+			}
 			fmt.Println("Hasta luego.")
 			return
 		}
-		fmt.Println(Preguntar(texto, confirmarAccion))
+		respuesta := Preguntar(texto, confirmarAccion)
+		fmt.Println(respuesta)
+		guardarTurno(texto, respuesta)
 	}
 }

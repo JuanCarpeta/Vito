@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 )
@@ -17,6 +18,10 @@ const (
 )
 
 var bloqueoMemoria sync.Mutex
+
+// reClaveSecreta detecta claves que por nombre son secretos: no se guardan
+// en claro aunque el valor no contenga la palabra.
+var reClaveSecreta = regexp.MustCompile(`(?i)(password|contrase|token|secret|api[_-]?key|credencial|pin\b)`)
 
 func rutaMemoria() string {
 	ejecutable, err := os.Executable()
@@ -62,6 +67,11 @@ func GuardarMemoria(clave, valor string) string {
 	valor = strings.TrimSpace(valor)
 	if clave == "" || valor == "" {
 		return "Necesito una clave y un valor para guardar en la memoria."
+	}
+	// No guardar secretos en claro (misma regla que el historial de chat).
+	valor = ocultarSecretos(valor)
+	if reClaveSecreta.MatchString(clave) {
+		valor = "[oculto por seguridad]"
 	}
 	if len(valor) > maxTexto {
 		valor = valor[:maxTexto]

@@ -68,6 +68,15 @@ func InicializarDB() error {
 			clave TEXT PRIMARY KEY,
 			valor TEXT NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS conversaciones (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			sesion TEXT NOT NULL,
+			rol TEXT NOT NULL,
+			contenido TEXT NOT NULL,
+			fecha TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_conv_sesion ON conversaciones(sesion)`,
+		`CREATE INDEX IF NOT EXISTS idx_conv_fecha ON conversaciones(fecha)`,
 	}
 	for _, instruccion := range instrucciones {
 		if _, err := db.Exec(instruccion); err != nil {

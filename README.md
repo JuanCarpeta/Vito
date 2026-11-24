@@ -1,8 +1,10 @@
 # Vito
 
-Asistente de terminal que responde por texto y puede buscar, abrir y crear
-archivos en tu computador. Todo corre local: construido en **Go** e integrado
-con un modelo de lenguaje local vía **Ollama**, sin nube ni cuentas.
+Asistente de terminal que conversa contigo y actúa sobre tu computador:
+busca, abre, cierra, crea, mueve y borra archivos, resume documentos, busca
+en internet y recuerda datos entre sesiones. Todo corre local: construido en
+**Go** e integrado con un modelo de lenguaje local vía **Ollama**, sin nube
+ni cuentas.
 
 ## Stack tecnológico
 
@@ -18,7 +20,7 @@ con un modelo de lenguaje local vía **Ollama**, sin nube ni cuentas.
 
 - **Windows 10 u 11** (64 bits)
 - **Ollama** corriendo con el modelo `llama3.1:8b`
-- 8 GB de RAM recomendados para que el modelo responda con fluidez
+- 16 GB de RAM recomendados para que el modelo responda con fluidez
 
 Para instalar Ollama y el modelo automáticamente, usa el instalador incluido
 (paso 2 de la instalación).
@@ -76,15 +78,25 @@ Escribe tus órdenes y presiona Enter. Ejemplos:
 | `cierra steam` | Cierra una aplicación (cierre limpio, luego forzado) |
 | `lee notas.txt` | Muestra el contenido de un archivo |
 | `hazme un resumen de informe.docx` | Resume un .txt o .docx con el modelo |
-| `crea un word llamado informe.docx con el texto...` | Crea Word, Excel o PDF reales |
+| `crea un word llamado informe.docx con el texto...` | Crea **Word, Excel o PDF reales** |
 | `crea un archivo llamado notas.txt con el texto hola` | Crea archivos de texto |
+| `borra paso-dos.docx` | Borra un archivo **pidiendo confirmación antes** |
+| `mueve foto.png a Descargas` / `copia informe a Documentos` | Mueve o copia archivos y carpetas |
 | `recuerda que estudio a las 7` | Guarda el dato para siempre |
 | `que recuerdas de mi` | Consulta la memoria persistente |
+| `de que hablamos ayer` | Recuerda conversaciones anteriores |
+| `olvidar conversacion` | Borra el historial de chat (todo o solo el de ayer) |
 | `busca en internet el clima de hoy` | Búsqueda web en DuckDuckGo |
 | `apagar` | Cierra Vito (escrito exacto y solo) |
 
-> **Nota:** `ve a` solo mueve a Vito internamente; `abre` sí abre ventanas
-> y programas.
+> **Notas:**
+> - `ve a` solo mueve a Vito internamente; `abre` sí abre ventanas y programas.
+> - Borrar y sobrescribir **siempre piden confirmación** (s/N), y Vito se niega
+>   a tocar sus propios archivos o los del sistema.
+> - Los secretos (contraseñas, tokens) que le digas se guardan enmascarados,
+>   tanto en el historial de chat como en la memoria.
+> - Vito recuerda las conversaciones de hasta 30 días: al arrancar verás un
+>   resumen de lo hablado disponible para preguntas como "¿de qué hablamos?".
 
 ## Arquitectura
 
@@ -92,8 +104,11 @@ Escribe tus órdenes y presiona Enter. Ejemplos:
 |---|---|---|
 | `src/config.go` | config.py | Toda la configuración |
 | `src/ollama.go` | core/cerebro.py (parte) | Cliente de `/api/chat` con herramientas |
-| `src/cerebro.go` | core/cerebro.py | Prompt, 12 herramientas, loop de function calling, intenciones directas |
-| `src/herramientas.go` | core/archivos.py | Buscar/listar/navegar/abrir/leer/crear/info |
+| `src/cerebro.go` | core/cerebro.py | Prompt, 14 herramientas, loop de function calling (con rescate de JSON), intenciones directas |
+| `src/herramientas.go` | core/archivos.py | Buscar/listar/navegar/abrir/cerrar/leer/crear/mover/borrar/info, resolución de aplicaciones |
+| `src/documentos.go` | — | Creación real de Word, Excel y PDF con la stdlib |
+| `src/historial.go` | — | Historial de conversación: turnos, resumen incremental, secretos enmascarados, poda a 30 días |
+| `src/arranque.go` | — | Banner animado, saludo por hora y barra de progreso del índice |
 | `src/scanner.go` | core/scanner.py | Escaneo incremental con firma por carpeta (SHA-256), búsqueda en índice |
 | `src/database.go` | core/database.py | SQLite (archivos.db, WAL), borrado/movimiento de subárboles |
 | `src/vigilante.go` | core/watchdog_monitor.py | ReadDirectoryChangesW: un handle recursivo por unidad |
@@ -135,5 +150,7 @@ instrucciones: ese es el único archivo que tus compañeros necesitan.
 
 ## Datos locales
 
-`archivos.db`, `memoria.json` y `vito.log` se generan junto al ejecutable y
-no se suben al repositorio.
+`archivos.db` (índice de archivos **e historial de conversaciones**),
+`memoria.json` y `vito.log` se generan junto al ejecutable y no se suben al
+repositorio. Todo el contenido es local: nada de lo que le digas a Vito sale
+de tu máquina (salvo las búsquedas web que tú pidas).
