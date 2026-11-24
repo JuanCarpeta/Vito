@@ -71,6 +71,7 @@ Escribe tus órdenes y presiona Enter. Ejemplos:
 
 | Orden | Qué hace |
 |---|---|
+| `ayuda` | Lista todo lo que Vito sabe hacer |
 | `que hay en la carpeta actual` | Lista el contenido real del directorio |
 | `busca el archivo de calculo` | Busca archivos por nombre en todo el disco |
 | `ve a C:\Users\PC\Documents` | Se ubica en una carpeta (sin abrir ventanas) |

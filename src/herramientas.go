@@ -387,9 +387,11 @@ func infoArchivo(ruta string) string {
 	}
 	tipo := "archivo"
 	if info.IsDir() {
-		tipo = "carpeta"
+		tipo = "una carpeta"
+	} else {
+		tipo = "un archivo"
 	}
-	return fmt.Sprintf("%s es un %s de %.1f KB, modificado el %s.",
+	return fmt.Sprintf("%s es %s de %.1f KB, modificado el %s.",
 		ruta, tipo, float64(info.Size())/1024, info.ModTime().Format("2006-01-02 15:04"))
 }
 
@@ -530,7 +532,7 @@ func moverOCopiar(consulta, destino string, mover bool, confirmar func(string) b
 
 	accion := "Copie"
 	if mover {
-		accion = "Move"
+		accion = "Moví"
 		if err := os.Rename(origen, final); err != nil {
 			if err := copiarRuta(origen, final, info.IsDir()); err != nil {
 				return fmt.Sprintf("No pude mover %s: %v", origen, err)

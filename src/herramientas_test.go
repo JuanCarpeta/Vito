@@ -139,7 +139,7 @@ func TestMoverArchivo(t *testing.T) {
 	}
 
 	respuesta := moverOCopiar("origen.txt", destino, true, nil)
-	if !strings.Contains(respuesta, "Move") {
+	if !strings.Contains(respuesta, "Moví") {
 		t.Errorf("respuesta inesperada: %s", respuesta)
 	}
 	if _, err := os.Stat(origen); !os.IsNotExist(err) {
@@ -181,7 +181,7 @@ func TestSobrescribirRequiereConfirmacion(t *testing.T) {
 	}
 
 	respuesta = moverOCopiar("origen.txt", destino, true, func(string) bool { return true })
-	if !strings.Contains(respuesta, "Move") {
+	if !strings.Contains(respuesta, "Moví") {
 		t.Errorf("respuesta inesperada al confirmar: %s", respuesta)
 	}
 	datos, err = os.ReadFile(final)
@@ -213,7 +213,7 @@ func TestMoverConPronombre(t *testing.T) {
 
 	moverOCopiar("origen.txt", primero, true, nil)
 	respuesta := moverOCopiar("esto", segundo, true, nil)
-	if !strings.Contains(respuesta, "Move") {
+	if !strings.Contains(respuesta, "Moví") {
 		t.Errorf("respuesta inesperada: %s", respuesta)
 	}
 	if _, err := os.Stat(filepath.Join(segundo, "origen.txt")); err != nil {
