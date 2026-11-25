@@ -11,21 +11,37 @@ import (
 )
 
 func main() {
+	silencioso := modoSilencioso()
+	if silencioso {
+		ocultarConsola()
+	}
+
 	// Indice de archivos: arranque rapido, el escaneo completo va en segundo plano.
 	indiceOK := InicializarDB() == nil
-	if !indiceOK {
+	if !indiceOK && !silencioso {
 		fmt.Println("Aviso: no pude abrir el indice de archivos; la busqueda sera lenta.")
 	}
 	podarHistorial()
 
 	// Vigilancia en tiempo real con cola de eventos y reconciliacion periodica.
-	if VigilarTiempoReal {
+	if VigilarTiempoReal && adquirirVigilante() {
 		cola := NuevaColaEventos(AplicarLote, Reconciliar)
 		cola.Iniciar()
 		vigilante := NuevoVigilante(cola)
 		vigilante.Iniciar()
 		defer vigilante.Detener()
 		defer cola.Detener()
+	}
+
+	if silencioso {
+		if indiceOK {
+			IndexarUnidades(false)
+			escribirLog("modo silencioso: indice inicial listo (%d filas)", ConteoFilas())
+		}
+		escribirLog("Vito v%s en segundo plano, vigilando el disco", VersionActual)
+		for {
+			time.Sleep(time.Hour)
+		}
 	}
 
 	if indiceOK {
@@ -35,6 +51,10 @@ func main() {
 		})
 	} else {
 		AnimarArranque(nil)
+	}
+	// Aviso de actualizacion: una sola linea, silencioso si falla.
+	if aviso := VerificarActualizacionAlArrancar(); aviso != "" {
+		fmt.Println(aviso)
 	}
 
 	lector := bufio.NewScanner(os.Stdin)
@@ -74,5 +94,10 @@ func main() {
 		respuesta := Preguntar(texto, confirmarAccion)
 		fmt.Println(respuesta)
 		guardarTurno(texto, respuesta)
+		if reiniciarTrasActualizar.Load() {
+			// La actualizacion ya dejo el script listo: salir para aplicarla.
+			fmt.Println("Vito se esta actualizando. Hasta en un momento.")
+			return
+		}
 	}
 }

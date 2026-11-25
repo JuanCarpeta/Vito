@@ -265,6 +265,10 @@ var reSaludo = regexp.MustCompile(
 		`(?:\s+(?:que tal|qué tal|como estas|cómo estás|como vas|todo bien|vito|hey))*` +
 		`[^a-z0-9]*\s*$`)
 
+// reActualizar reconoce el pedido de auto-actualizacion.
+var reActualizar = regexp.MustCompile(
+	`(?i)^\s*(?:actualiza(?:r|te|me)?|update)(?:\s+(?:vito|el sistema|la version|te))?\s*[.?!]*\s*$`)
+
 // responderDirecto ejecuta navegar y listar sin modelo; "" = que decida el modelo.
 func responderDirecto(texto string, confirmar func(string) bool) string {
 	if reSaludo.MatchString(strings.TrimSpace(texto)) {
@@ -280,6 +284,9 @@ func responderDirecto(texto string, confirmar func(string) bool) string {
 		default:
 			return "¡Hola! Buenas noches. ¿En qué te ayudo?"
 		}
+	}
+	if reActualizar.MatchString(strings.TrimSpace(texto)) {
+		return ActualizarVito()
 	}
 	if reAyuda.MatchString(strings.TrimSpace(texto)) {
 		return textoAyuda()

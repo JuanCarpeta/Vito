@@ -139,7 +139,7 @@ func AnimarArranque(escanear func()) {
 	fmt.Println(saludoPorHora())
 	fmt.Println()
 	if escanear == nil {
-		fmt.Println("Vito listo. Escribe una orden o 'apagar' para salir.")
+		fmt.Println(fmt.Sprintf("Vito v%s listo. Escribe una orden, 'ayuda' o 'apagar' para salir.", VersionActual))
 		return
 	}
 	listo := make(chan struct{})
@@ -148,5 +148,5 @@ func AnimarArranque(escanear func()) {
 		close(listo)
 	}()
 	animarProgreso(listo)
-	fmt.Println("Vito listo. Escribe una orden o 'apagar' para salir.")
+	fmt.Println(fmt.Sprintf("Vito v%s listo. Escribe una orden, 'ayuda' o 'apagar' para salir.", VersionActual))
 }
