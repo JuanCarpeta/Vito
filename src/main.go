@@ -45,12 +45,13 @@ func main() {
 	}
 
 	if indiceOK {
-		go func() {
+		AnimarArranque(func() {
 			IndexarUnidades(false)
 			escribirLog("escaneo inicial listo: %d filas en el indice", ConteoFilas())
-		}()
+		})
+	} else {
+		AnimarArranque(nil)
 	}
-	fmt.Printf("Vito v%s listo. Escribe una orden, 'ayuda' o 'apagar' para salir.\n", VersionActual)
 	// Aviso de actualizacion: una sola linea, silencioso si falla.
 	if aviso := VerificarActualizacionAlArrancar(); aviso != "" {
 		fmt.Println(aviso)
