@@ -63,8 +63,12 @@ func LeerTextoDocumento(ruta string) (string, error) {
 		return string(contenido), nil
 	case ".docx":
 		return leerDocx(ruta)
+	case ".pdf":
+		return leerPDF(ruta)
+	case ".xlsx":
+		return leerXLSX(ruta)
 	default:
-		return "", fmt.Errorf("formato %s no soportado para resumir (usa .txt o .docx)", ext)
+		return "", fmt.Errorf("formato %s no soportado para resumir (usa .txt, .docx o .pdf)", ext)
 	}
 }
 

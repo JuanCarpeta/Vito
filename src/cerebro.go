@@ -89,7 +89,7 @@ func definirHerramientas() []Herramienta {
 			}, []string{"ruta"}),
 		esquema("cerrar_app", "Cierra una aplicacion abierta por su nombre ('cierra Steam', 'cierra el bloc de notas'). Primero intenta un cierre limpio para que el programa guarde; si no responde, lo fuerza.",
 			map[string]EsquemaProp{"nombre": prop("string", "Nombre de la aplicacion, por ejemplo 'steam'")}, []string{"nombre"}),
-		esquema("resumir_documento", "Lee un documento de texto (.txt) o Word (.docx) y devuelve un resumen breve hecho por el modelo. Usala cuando el usuario diga 'resume', 'de que trata' o 'hazme un resumen de'.",
+		esquema("resumir_documento", "Lee un documento de texto (.txt), Word (.docx) o PDF y devuelve un resumen breve hecho por el modelo. Usala cuando el usuario diga 'resume', 'de que trata' o 'hazme un resumen de'.",
 			map[string]EsquemaProp{"ruta": prop("string", "Ruta del documento a resumir")}, []string{"ruta"}),
 		esquema("listar_carpeta", "Lista el contenido real de una carpeta. Usa '.' para la carpeta actual.",
 			map[string]EsquemaProp{"ruta": prop("string", "Ruta de la carpeta")}, []string{"ruta"}),
@@ -269,6 +269,9 @@ var reSaludo = regexp.MustCompile(
 var reActualizar = regexp.MustCompile(
 	`(?i)^\s*(?:actualiza(?:r|te|me)?|update)(?:\s+(?:vito|el sistema|la version|te))?\s*[.?!]*\s*$`)
 
+var reDoctor = regexp.MustCompile(
+	`(?i)^\s*(?:doctor|diagnostico|diagnostico de vito|revisa(?:r)? (?:el )?sistema|estado del sistema|que problemas tienes)\s*[.?!]*\s*$`)
+
 // responderDirecto ejecuta navegar y listar sin modelo; "" = que decida el modelo.
 func responderDirecto(texto string, confirmar func(string) bool) string {
 	if reSaludo.MatchString(strings.TrimSpace(texto)) {
@@ -284,6 +287,9 @@ func responderDirecto(texto string, confirmar func(string) bool) string {
 		default:
 			return "¡Hola! Buenas noches. ¿En qué te ayudo?"
 		}
+	}
+	if reDoctor.MatchString(strings.TrimSpace(texto)) {
+		return Doctor()
 	}
 	if reActualizar.MatchString(strings.TrimSpace(texto)) {
 		return ActualizarVito()

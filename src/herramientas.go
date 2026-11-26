@@ -346,6 +346,18 @@ func extraerRutaCreada(respuesta string) string {
 }
 
 func leerArchivo(ruta string) string {
+	// Documentos con formato: usar los lectores dedicados.
+	ext := strings.ToLower(filepath.Ext(ruta))
+	if ext == ".pdf" || ext == ".docx" || ext == ".xlsx" {
+		texto, err := LeerTextoDocumento(ruta)
+		if err != nil {
+			return fmt.Sprintf("No pude leer %s: %v", ruta, err)
+		}
+		if len(texto) > 3000 {
+			return fmt.Sprintf("Contenido de %s (truncado): %s", ruta, texto[:3000])
+		}
+		return fmt.Sprintf("Contenido de %s: %s", ruta, texto)
+	}
 	contenido, err := os.ReadFile(ruta)
 	if err != nil {
 		return fmt.Sprintf("No pude leer %s: %v", ruta, err)

@@ -114,16 +114,21 @@ var tablaCP1252 = map[rune]string{
 func aPDF(s string) string {
 	var b strings.Builder
 	for _, r := range s {
-		if octal, ok := tablaCP1252[r]; ok {
-			b.WriteString(octal)
-		} else if r < 128 {
+		switch {
+		case r == '(' || r == ')' || r == '\\':
+			b.WriteByte('\\')
 			b.WriteRune(r)
-		} else {
-			b.WriteRune('?')
+		default:
+			if octal, ok := tablaCP1252[r]; ok {
+				b.WriteString(octal)
+			} else if r < 128 {
+				b.WriteRune(r)
+			} else {
+				b.WriteRune('?')
+			}
 		}
 	}
-	return strings.NewReplacer("\\", "\\\\", "(", "\\(", ")", "\\)").
-		Replace(b.String())
+	return b.String()
 }
 
 // CrearPDF genera un PDF minimo de una pagina con titulo y parrafos.

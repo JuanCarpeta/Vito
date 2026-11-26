@@ -16,7 +16,7 @@ func main() {
 		ocultarConsola()
 	}
 
-	// Indice de archivos: arranque rapido, el escaneo completo va en segundo plano.
+	// Indice de archivos: consulta rapida, el escaneo completo va en segundo plano.
 	indiceOK := InicializarDB() == nil
 	if !indiceOK && !silencioso {
 		fmt.Println("Aviso: no pude abrir el indice de archivos; la busqueda sera lenta.")
@@ -45,13 +45,12 @@ func main() {
 	}
 
 	if indiceOK {
-		AnimarArranque(func() {
+		go func() {
 			IndexarUnidades(false)
 			escribirLog("escaneo inicial listo: %d filas en el indice", ConteoFilas())
-		})
-	} else {
-		AnimarArranque(nil)
+		}()
 	}
+	fmt.Printf("Vito v%s listo. Escribe una orden, 'ayuda' o 'apagar' para salir.\n", VersionActual)
 	// Aviso de actualizacion: una sola linea, silencioso si falla.
 	if aviso := VerificarActualizacionAlArrancar(); aviso != "" {
 		fmt.Println(aviso)

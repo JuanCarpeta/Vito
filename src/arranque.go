@@ -80,7 +80,7 @@ func dibujarBanner() {
 			fmt.Printf("%s%s%s\n", colorCian, string(l[:col]), colorReset)
 		}
 		fmt.Printf("\x1b[%dA", len(lineas))
-		time.Sleep(18 * time.Millisecond)
+		time.Sleep(35 * time.Millisecond)
 	}
 	fmt.Printf("\x1b[%dB\n", len(lineas))
 }

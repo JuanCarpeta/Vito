@@ -109,7 +109,6 @@ Escribe tus órdenes y presiona Enter. Ejemplos:
 | `src/herramientas.go` | core/archivos.py | Buscar/listar/navegar/abrir/cerrar/leer/crear/mover/borrar/info, resolución de aplicaciones |
 | `src/documentos.go` | — | Creación real de Word, Excel y PDF con la stdlib |
 | `src/historial.go` | — | Historial de conversación: turnos, resumen incremental, secretos enmascarados, poda a 30 días |
-| `src/arranque.go` | — | Banner animado, saludo por hora y barra de progreso del índice |
 | `src/scanner.go` | core/scanner.py | Escaneo incremental con firma por carpeta (SHA-256), búsqueda en índice |
 | `src/database.go` | core/database.py | SQLite (archivos.db, WAL), borrado/movimiento de subárboles |
 | `src/vigilante.go` | core/watchdog_monitor.py | ReadDirectoryChangesW: un handle recursivo por unidad |
